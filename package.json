@@ -1,17 +1,9 @@
 {
-  "name": "spinner-wheel",
+  "name": "shared-spinner-wheel",
   "version": "1.0.0",
+  "description": "网页版实时共享转盘：苹果风灰金 / 多命名转盘 / 移动端适配。纯前端 + Supabase Realtime，部署到 GitHub Pages。",
   "private": true,
-  "description": "网页版实时共享转盘：多命名转盘、各自选看、实时看到彼此转动结果",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
-  },
-  "engines": {
-    "node": "22.x"
-  },
-  "dependencies": {
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5"
+    "start": "npx --yes serve public"
   }
 }

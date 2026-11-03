@@ -3,6 +3,8 @@
 (function () {
   const $ = (s) => document.querySelector(s);
 
+  const SPIN_DURATION = 4200; // 转动时长（毫秒），所有人一致以保证动画对齐
+
   const state = {
     roomId: null,
     name: null,
@@ -13,6 +15,7 @@
     participants: [],
     history: [],
     spinningWheels: new Set(),
+    bootstrapped: false,
   };
 
   const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -28,7 +31,7 @@
     return (p || 'id') + '_' + Math.random().toString(36).slice(2, 10);
   }
 
-  // 与 lib/rooms.js 的 PALETTE 保持一致（修改时需同步）
+  // 与 realtime-supabase.js 的 PALETTE 保持一致（修改时需同步）
   const PALETTE = [
     '#6FA8DC', '#E8B85C', '#81C7A8', '#E29BB4', '#A593D6',
     '#E8A06B', '#5FBFD0', '#C98FB0', '#9BC17A', '#D6B25E',
@@ -43,11 +46,23 @@
     return PALETTE[0];
   }
 
+  // 按权重随机返回目标扇区下标（发起者权威：谁转动谁本地计算并广播同一结果）
+  function weightedPick(options) {
+    const total = options.reduce((s, o) => s + Math.max(0, o.weight || 0), 0);
+    if (total <= 0) return Math.floor(Math.random() * options.length);
+    let r = Math.random() * total;
+    for (let i = 0; i < options.length; i++) {
+      const w = Math.max(0, options[i].weight || 0);
+      r -= w;
+      if (r < 0) return i;
+    }
+    return options.length - 1;
+  }
+
   let mainWheel, overlayWheel;
   let pickerEl = null;
   let overlayTimer = null;
   let toastTimer = null;
-  let pendingNewWheel = false;
 
   // ---------- 初始化 ----------
   function init() {
@@ -69,6 +84,11 @@
     $('#roomCode').textContent = room;
     $('#nameInput').value = state.name;
 
+    if (!window.SpinAPI || !window.SpinAPI.configured) {
+      showConfigHint();
+      return;
+    }
+
     mainWheel = new window.Wheel($('#wheelCanvas'));
     overlayWheel = new window.Wheel($('#overlayCanvas'));
 
@@ -79,7 +99,7 @@
     $('#addOptionBtn').addEventListener('click', onAddOption);
     $('#deleteWheelBtn').addEventListener('click', onDeleteWheel);
     $('#wheelNameInput').addEventListener('change', onRenameWheel);
-    $('#clearHistoryBtn').addEventListener('click', () => window.SpinAPI.clearHistory(state.roomId));
+    $('#clearHistoryBtn').addEventListener('click', onClearHistory);
 
     // 移动端：编辑面板底部抽屉
     const mobileEditBtn = $('#mobileEditBtn');
@@ -96,26 +116,36 @@
       if ($('#overlay').classList.contains('show')) { overlayWheel.resize(); overlayWheel.draw(); }
     });
 
-    bindSocket();
+    bindRealtime();
     window.SpinAPI.join(state.roomId, state.name, state.participantId);
   }
 
+  function showConfigHint() {
+    const hint = document.querySelector('.hint');
+    if (hint) {
+      hint.textContent = '尚未配置 Supabase：请按 README 在 public/config.js 填入你的 SUPABASE_URL 与 ANON_KEY 后重新部署。';
+      hint.style.color = '#B00020';
+    }
+    toast('未配置 Supabase，详见 README');
+    // eslint-disable-next-line no-console
+    console.warn('SpinAPI 未配置：请在 public/config.js 填入 Supabase 的 URL 和 anon key。');
+  }
+
   // ---------- 实时事件 ----------
-  function bindSocket() {
+  function bindRealtime() {
     const A = window.SpinAPI;
-    A.on('state', applyState);
+    A.on('ready', () => {
+      A.setActiveWheel(state.activeWheelId);
+      bootstrap();
+    });
     A.on('wheels', (d) => {
       state.wheels = d.wheels;
       state.wheelOrder = d.wheelOrder;
       if (!state.wheelOrder.includes(state.activeWheelId)) state.activeWheelId = state.wheelOrder[0];
-      if (pendingNewWheel && state.wheelOrder.length) {
-        state.activeWheelId = state.wheelOrder[state.wheelOrder.length - 1];
-        pendingNewWheel = false;
-        window.SpinAPI.setActiveWheel(state.roomId, state.activeWheelId);
-      }
       renderWheels();
       renderOptions();
       renderMainWheel();
+      saveCache();
     });
     A.on('wheelOptions', (d) => {
       const w = state.wheels.find((x) => x.id === d.wheelId);
@@ -123,34 +153,90 @@
       if (d.wheelId === state.activeWheelId) renderOptions();
       else renderWheels();
       if (d.wheelId === state.activeWheelId) renderMainWheel();
+      saveCache();
     });
-    A.on('participants', (d) => { state.participants = d.participants; renderParticipants(); });
+    A.on('participants', (d) => { state.participants = d; renderParticipants(); });
     A.on('history', (d) => { state.history = d.history; renderHistory(); });
-    A.on('spinStart', onSpinStart);
+    A.on('spinStart', doSpinStart);
     A.on('spinEnd', onSpinEnd);
-    A.on('error', (d) => toast(d.message || '操作失败'));
-
-    A.socket.on('connect', () => {
-      // 断线重连后重新加入（保留昵称与身份）
-      window.SpinAPI.join(state.roomId, state.name, state.participantId);
-    });
+    A.on('clearHistory', () => { state.history = []; renderHistory(); saveCache(); });
+    A.on('state', onState);
+    A.on('requestState', onRequestState);
   }
 
-  function applyState(d) {
-    const prev = state.activeWheelId;
-    state.wheels = d.wheels;
-    state.wheelOrder = d.wheelOrder;
-    state.participants = d.participants;
-    state.history = d.history;
-    if (!state.wheelOrder.includes(state.activeWheelId)) {
-      state.activeWheelId = state.wheelOrder[0];
+  // ---------- 状态自举（无服务器，靠房间内成员互相同步快照） ----------
+  function bootstrap() {
+    if (state.bootstrapped) return;
+    const cached = loadCache(state.roomId);
+    if (cached) {
+      applySnapshot(cached);
+      state.bootstrapped = true;
+      renderAll();
     }
-    // 重连/改名后恢复之前选看的转盘
-    if (prev && state.wheelOrder.includes(prev)) {
-      state.activeWheelId = prev;
-      window.SpinAPI.setActiveWheel(state.roomId, prev);
-    }
+    window.SpinAPI.requestState();
+    // 若房间无人回应（自己是第一个），超时后用默认转盘
+    setTimeout(() => {
+      if (!state.bootstrapped) {
+        const def = defaultRoomState();
+        applySnapshot(def);
+        state.bootstrapped = true;
+        window.SpinAPI.broadcastWheels(def.wheels, def.wheelOrder);
+        renderAll();
+        saveCache();
+      }
+    }, 1500);
+  }
+
+  function onState(snap) {
+    if (state.bootstrapped) return; // 已确定状态后不再被覆盖
+    applySnapshot(snap);
+    state.bootstrapped = true;
     renderAll();
+    saveCache();
+  }
+
+  function onRequestState() {
+    if (state.bootstrapped && state.wheels.length) {
+      window.SpinAPI.respondState({ wheels: state.wheels, wheelOrder: state.wheelOrder, history: state.history });
+    }
+  }
+
+  function applySnapshot(snap) {
+    state.wheels = snap.wheels || [];
+    state.wheelOrder = snap.wheelOrder || [];
+    state.history = snap.history || [];
+    if (!state.wheelOrder.includes(state.activeWheelId)) state.activeWheelId = state.wheelOrder[0] || null;
+  }
+
+  function defaultRoomState() {
+    const wId = genId('wheel');
+    return {
+      wheels: [{ id: wId, name: '我的转盘', options: defaultOptions() }],
+      wheelOrder: [wId],
+      history: [],
+    };
+  }
+  function defaultOptions() {
+    return [
+      { id: genId('opt'), label: '选项一', color: PALETTE[0], weight: 1, icon: 'star' },
+      { id: genId('opt'), label: '选项二', color: PALETTE[2], weight: 1, icon: 'gift' },
+    ];
+  }
+
+  // ---------- 本地缓存（刷新/重连后恢复视图） ----------
+  function cacheKey() { return 'sw_room_' + state.roomId; }
+  function saveCache() {
+    try {
+      localStorage.setItem(cacheKey(), JSON.stringify({
+        wheels: state.wheels, wheelOrder: state.wheelOrder, history: state.history,
+      }));
+    } catch (e) { /* 忽略配额错误 */ }
+  }
+  function loadCache() {
+    try {
+      const raw = localStorage.getItem(cacheKey());
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
   }
 
   // ---------- 渲染 ----------
@@ -177,7 +263,7 @@
       chip.textContent = w.name;
       chip.addEventListener('click', () => {
         state.activeWheelId = id;
-        window.SpinAPI.setActiveWheel(state.roomId, id);
+        window.SpinAPI.setActiveWheel(id);
         renderWheels();
         renderOptions();
         renderMainWheel();
@@ -250,7 +336,8 @@
 
   function emitOptions(w) {
     w.options.forEach((o) => { if (!o.id) o.id = genId('opt'); });
-    window.SpinAPI.updateOptions(state.roomId, w.id, w.options);
+    window.SpinAPI.broadcastWheelOptions(w.id, w.options);
+    saveCache();
   }
 
   function renderMainWheel() {
@@ -322,33 +409,63 @@
   // ---------- 动作 ----------
   function onSpin() {
     const w = activeWheel();
-    if (!w) return;
+    if (!w || !w.options.length) return;
     if (state.spinningWheels.has(w.id)) {
       toast('该转盘正在转动，请稍候');
       return;
     }
-    window.SpinAPI.spin(state.roomId, w.id);
+    const targetIndex = weightedPick(w.options);
+    const by = { id: state.participantId, name: state.name };
+    // 本地立即播放（自己收不到自己广播的 spinStart，因为 self:false）
+    doSpinStart({ wheelId: w.id, targetIndex, duration: SPIN_DURATION, by });
+    window.SpinAPI.broadcastSpinStart({ wheelId: w.id, targetIndex, duration: SPIN_DURATION, by });
   }
 
-  function onSpinStart(d) {
+  // 播放转动动画（发起者与接收者共用，但只有发起者 finishSpin）
+  function doSpinStart(d) {
     state.spinningWheels.add(d.wheelId);
     updateSpinBtn();
     if (d.wheelId === state.activeWheelId) {
-      mainWheel.spinTo(d.targetIndex, d.duration, () => mainWheel.setHighlight(d.targetIndex));
+      mainWheel.spinTo(d.targetIndex, d.duration, () => {
+        mainWheel.setHighlight(d.targetIndex);
+        if (d.by.id === state.participantId) finishSpin(d);
+      });
     } else {
       showOverlay(d);
     }
   }
 
-  function onSpinEnd(d) {
-    state.spinningWheels.delete(d.wheelId);
+  // 发起者动画结束后：本地记录 + 广播结果
+  function finishSpin(d) {
+    const w = state.wheels.find((x) => x.id === d.wheelId);
+    const opt = w && w.options[d.targetIndex];
+    const item = {
+      id: genId('h'),
+      wheelId: d.wheelId,
+      targetIndex: d.targetIndex,
+      label: opt ? opt.label : '',
+      wheelName: w ? w.name : '',
+      icon: opt ? opt.icon : null,
+      by: d.by,
+      ts: Date.now(),
+    };
+    applyHistoryItem(item);
+    window.SpinAPI.broadcastSpinEnd(item);
+  }
+
+  function onSpinEnd(item) {
+    state.spinningWheels.delete(item.wheelId);
     updateSpinBtn();
-    if (!state.history.find((h) => h.id === d.id)) {
-      state.history.unshift(d);
+    applyHistoryItem(item);
+  }
+
+  function applyHistoryItem(item) {
+    if (!state.history.find((h) => h.id === item.id)) {
+      state.history.unshift(item);
       if (state.history.length > 100) state.history.length = 100;
+      renderHistory();
+      saveCache();
     }
-    if (d.wheelId !== state.activeWheelId) hideOverlay(d);
-    renderHistory();
   }
 
   function updateSpinBtn() {
@@ -366,26 +483,48 @@
   function onNameChange(e) {
     state.name = e.target.value.trim() || state.name;
     sessionStorage.setItem('sw_name', state.name);
-    window.SpinAPI.join(state.roomId, state.name, state.participantId);
+    window.SpinAPI.setName(state.name);
   }
 
   function onAddWheel() {
     const name = prompt('给新转盘起个名字：', '新转盘');
-    if (name) {
-      pendingNewWheel = true;
-      window.SpinAPI.createWheel(state.roomId, name);
-    }
+    if (!name) return;
+    const id = genId('wheel');
+    state.wheels.push({ id, name, options: defaultOptions() });
+    state.wheelOrder.push(id);
+    state.activeWheelId = id;
+    window.SpinAPI.broadcastWheels(state.wheels, state.wheelOrder);
+    window.SpinAPI.setActiveWheel(id);
+    renderWheels();
+    renderOptions();
+    renderMainWheel();
+    saveCache();
   }
 
   function onRenameWheel(e) {
     const w = activeWheel();
-    if (w) window.SpinAPI.renameWheel(state.roomId, w.id, e.target.value.trim() || w.name);
+    if (w) {
+      w.name = e.target.value.trim() || w.name;
+      window.SpinAPI.broadcastWheels(state.wheels, state.wheelOrder);
+      renderWheels();
+      saveCache();
+    }
   }
 
   function onDeleteWheel() {
     const w = activeWheel();
     if (w && state.wheelOrder.length > 1) {
-      if (confirm('确定删除『' + w.name + '』？')) window.SpinAPI.deleteWheel(state.roomId, w.id);
+      if (!confirm('确定删除『' + w.name + '』？')) return;
+      const idx = state.wheelOrder.indexOf(w.id);
+      state.wheelOrder = state.wheelOrder.filter((id) => id !== w.id);
+      state.wheels = state.wheels.filter((x) => x.id !== w.id);
+      if (!state.wheelOrder.includes(state.activeWheelId)) state.activeWheelId = state.wheelOrder[0];
+      window.SpinAPI.broadcastWheels(state.wheels, state.wheelOrder);
+      window.SpinAPI.setActiveWheel(state.activeWheelId);
+      renderWheels();
+      renderOptions();
+      renderMainWheel();
+      saveCache();
     }
   }
 
@@ -396,6 +535,13 @@
     emitOptions(w);
     renderOptions();
     renderMainWheel();
+  }
+
+  function onClearHistory() {
+    state.history = [];
+    window.SpinAPI.broadcastClearHistory();
+    renderHistory();
+    saveCache();
   }
 
   function copyShare() {
@@ -412,12 +558,13 @@
     $('#overlayResult').textContent = '';
     const wheel = state.wheels.find((x) => x.id === d.wheelId);
     if (wheel) overlayWheel.setOptions(wheel.options);
-    overlayWheel.spinTo(d.targetIndex, d.duration, () => overlayWheel.setHighlight(d.targetIndex));
-  }
-  function hideOverlay(d) {
-    if (d) $('#overlayResult').textContent = d.by.name + ' 转到了 ' + d.label;
-    clearTimeout(overlayTimer);
-    overlayTimer = setTimeout(() => $('#overlay').classList.remove('show'), 2600);
+    overlayWheel.spinTo(d.targetIndex, d.duration, () => {
+      overlayWheel.setHighlight(d.targetIndex);
+      const opt = wheel && wheel.options[d.targetIndex];
+      $('#overlayResult').textContent = d.by.name + ' 转到了 ' + (opt ? opt.label : '');
+      clearTimeout(overlayTimer);
+      overlayTimer = setTimeout(() => ov.classList.remove('show'), 2600);
+    });
   }
 
   // ---------- 图标选择器 ----------
