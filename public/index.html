@@ -30,7 +30,18 @@
         <canvas id="wheelCanvas"></canvas>
       </div>
       <div id="activeWheelName" class="active-wheel-name"></div>
-      <button id="spinBtn" class="spin-btn">转动</button>
+      <div class="spin-row">
+        <button id="spinBtn" class="spin-btn">转动</button>
+        <button id="resetBtn" class="reset-btn" title="刷新归零：清空结果、转盘回到初始状态">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" />
+            <path d="M20 4v5h-5" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          刷新
+        </button>
+      </div>
       <p class="hint">把链接发给朋友，进同一个房间即可一起玩。谁转动，所有人都能实时看到结果。</p>
     </section>
 

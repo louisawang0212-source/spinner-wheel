@@ -88,6 +88,7 @@
     overlayWheel = new window.Wheel($('#overlayCanvas'));
 
     $('#spinBtn').addEventListener('click', onSpin);
+    $('#resetBtn').addEventListener('click', onReset);
     $('#nameInput').addEventListener('change', onNameChange);
     $('#copyBtn').addEventListener('click', copyShare);
     $('#roomCode').addEventListener('click', onJoinByCode);
@@ -156,6 +157,7 @@
     A.on('history', (d) => { state.history = d.history; renderHistory(); });
     A.on('spinStart', doSpinStart);
     A.on('spinEnd', onSpinEnd);
+    A.on('reset', doReset);
     A.on('clearHistory', () => { state.history = []; renderHistory(); saveCache(); });
     A.on('state', onState);
     A.on('requestState', onRequestState);
@@ -411,6 +413,30 @@
     window.SpinAPI.broadcastSpinStart({ wheelId: w.id, targetIndex, duration: SPIN_DURATION, by });
   }
 
+  // 刷新归零：清掉中奖高亮，转盘转回初始角度（同步给同房间的人）
+  function onReset() {
+    const w = activeWheel();
+    if (!w) return;
+    if (state.spinningWheels.has(w.id)) {
+      toast('正在转动，转完再刷新');
+      return;
+    }
+    const d = { wheelId: w.id };
+    doReset(d);
+    window.SpinAPI.broadcastReset(d);
+    toast('已刷新归零');
+  }
+
+  function doReset(d) {
+    if (!d || d.wheelId !== state.activeWheelId) return;
+    mainWheel.reset(true);
+    const ov = $('#overlay');
+    if (ov.classList.contains('show')) {
+      clearTimeout(overlayTimer);
+      ov.classList.remove('show');
+    }
+  }
+
   // 播放转动动画（发起者与接收者共用，但只有发起者 finishSpin）
   function doSpinStart(d) {
     state.spinningWheels.add(d.wheelId);
@@ -460,14 +486,17 @@
 
   function updateSpinBtn() {
     const btn = $('#spinBtn');
+    const resetBtn = $('#resetBtn');
     const w = activeWheel();
-    if (w && state.spinningWheels.has(w.id)) {
+    const busy = !!(w && state.spinningWheels.has(w.id));
+    if (busy) {
       btn.disabled = true;
       btn.textContent = '转动中…';
     } else {
       btn.disabled = false;
       btn.textContent = w ? '转动『' + w.name + '』' : '转动';
     }
+    if (resetBtn) resetBtn.disabled = busy;
   }
 
   function onNameChange(e) {

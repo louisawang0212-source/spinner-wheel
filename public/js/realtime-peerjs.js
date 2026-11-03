@@ -189,6 +189,7 @@
     broadcastWheelOptions: (wheelId, options) => relayOut('wheelOptions', { wheelId, options }),
     broadcastSpinStart: (p) => relayOut('spinStart', p),
     broadcastSpinEnd: (p) => relayOut('spinEnd', p),
+    broadcastReset: (p) => relayOut('reset', p),
     broadcastClearHistory: () => relayOut('clearHistory', {}),
     requestState: () => relayOut('requestState', {}),
     respondState: (snap) => relayOut('state', snap),

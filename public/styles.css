@@ -108,8 +108,11 @@ html, body {
 }
 #wheelCanvas { width: 100%; height: 100%; display: block; }
 .active-wheel-name { margin-top: 14px; font-size: 18px; font-weight: 600; }
+.spin-row {
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; margin-top: 18px;
+}
 .spin-btn {
-  margin-top: 18px;
   padding: 14px 54px;
   font-size: 18px;
   font-weight: 600;
@@ -123,6 +126,20 @@ html, body {
 }
 .spin-btn:active { transform: scale(0.97); }
 .spin-btn:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
+.reset-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 13px 18px;
+  font-family: inherit; font-size: 15px; font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.18s ease, opacity 0.2s ease;
+}
+.reset-btn svg { color: var(--gold); }
+.reset-btn:active { transform: scale(0.97); background: var(--bg); }
+.reset-btn:disabled { opacity: 0.45; cursor: default; }
 .hint { margin-top: 16px; font-size: 13px; color: var(--text-2); text-align: center; max-width: 340px; line-height: 1.6; }
 
 /* ---------- 面板卡片 ---------- */
@@ -331,7 +348,9 @@ html, body {
   }
   .stage { order: 1; }
   .wheel-wrap { max-width: 340px; }
-  .spin-btn { padding: 14px 60px; }
+  .spin-row { gap: 10px; margin-top: 16px; }
+  .spin-btn { padding: 14px 34px; font-size: 17px; }
+  .reset-btn { padding: 12px 15px; font-size: 14px; }
 
   /* 编辑面板 → 底部抽屉 */
   .panel {

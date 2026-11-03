@@ -117,7 +117,7 @@
         const opt = this.options[i];
         const tc = contrastColor(color);
         const mid = a0 + sector / 2;
-        const fontSize = Math.max(12, Math.min(17, size / 26));
+        const fontSize = Math.max(15, Math.min(26, size / 18));
         const iconSize = size / 16;
 
         ctx.fillStyle = tc;
@@ -218,6 +218,31 @@
       ctx.strokeStyle = 'rgba(0,0,0,0.08)';
       ctx.stroke();
       ctx.restore();
+    }
+
+    // 刷新归零：清除高亮，转回初始角度（0），带一小段回转动画
+    reset(animated) {
+      this.highlightIndex = null;
+      const from = ((this.rotation % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      if (!animated || from < 0.001) {
+        this.rotation = 0;
+        this.draw();
+        return;
+      }
+      const t0 = performance.now();
+      const dur = 420;
+      const step = (now) => {
+        const t = Math.min(1, (now - t0) / dur);
+        this.rotation = from * (1 - easeOutCubic(t));
+        this.draw();
+        if (t < 1) {
+          requestAnimationFrame(step);
+        } else {
+          this.rotation = 0;
+          this.draw();
+        }
+      };
+      requestAnimationFrame(step);
     }
 
     spinTo(targetIndex, duration, onDone) {
