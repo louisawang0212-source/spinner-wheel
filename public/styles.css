@@ -302,7 +302,7 @@ html, body {
   .brand-name { font-size: 15px; }
   .top-actions { gap: 8px; }
   .name-label { display: none; }
-  .name-input { width: 72px; padding: 6px 8px; }
+  .name-input { width: 104px; padding: 6px 10px; }
   .btn-ghost { padding: 6px 12px; }
   .room-code { display: none; }
 

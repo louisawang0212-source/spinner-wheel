@@ -1,9 +1,10 @@
 {
   "name": "shared-spinner-wheel",
   "version": "1.0.0",
-  "description": "网页版实时共享转盘：苹果风灰金 / 多命名转盘 / 移动端适配。纯前端 + Supabase Realtime，部署到 GitHub Pages。",
+  "description": "网页版实时共享转盘：苹果风灰金 / 多命名转盘 / 移动端适配。纯前端 + PeerJS P2P，零配置部署到 GitHub Pages。",
   "private": true,
   "scripts": {
-    "start": "npx --yes serve public"
+    "start": "npx --yes serve public",
+    "dev": "npx --yes serve public -l 8080"
   }
 }

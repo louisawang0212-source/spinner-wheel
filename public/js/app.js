@@ -31,7 +31,7 @@
     return (p || 'id') + '_' + Math.random().toString(36).slice(2, 10);
   }
 
-  // 与 realtime-supabase.js 的 PALETTE 保持一致（修改时需同步）
+  // 与 realtime-peerjs.js 的 PALETTE 保持一致（修改时需同步）
   const PALETTE = [
     '#6FA8DC', '#E8B85C', '#81C7A8', '#E29BB4', '#A593D6',
     '#E8A06B', '#5FBFD0', '#C98FB0', '#9BC17A', '#D6B25E',
@@ -84,11 +84,6 @@
     $('#roomCode').textContent = room;
     $('#nameInput').value = state.name;
 
-    if (!window.SpinAPI || !window.SpinAPI.configured) {
-      showConfigHint();
-      return;
-    }
-
     mainWheel = new window.Wheel($('#wheelCanvas'));
     overlayWheel = new window.Wheel($('#overlayCanvas'));
 
@@ -116,19 +111,20 @@
       if ($('#overlay').classList.contains('show')) { overlayWheel.resize(); overlayWheel.draw(); }
     });
 
+    // 先用本地缓存（或默认转盘）立即渲染，避免等待实时通道就绪时出现空白页；
+    // 此时尚未“锁定”状态，连上房间后若拿到权威快照会覆盖它。
+    applySnapshot(loadCache(state.roomId) || defaultRoomState());
+    // 先把自己放进在线列表，实时在线状态到达后再被真实列表替换
+    state.participants = [{
+      id: state.participantId,
+      name: state.name,
+      activeWheelId: state.activeWheelId,
+      color: '#C9A86A',
+    }];
+    renderAll();
+
     bindRealtime();
     window.SpinAPI.join(state.roomId, state.name, state.participantId);
-  }
-
-  function showConfigHint() {
-    const hint = document.querySelector('.hint');
-    if (hint) {
-      hint.textContent = '尚未配置 Supabase：请按 README 在 public/config.js 填入你的 SUPABASE_URL 与 ANON_KEY 后重新部署。';
-      hint.style.color = '#B00020';
-    }
-    toast('未配置 Supabase，详见 README');
-    // eslint-disable-next-line no-console
-    console.warn('SpinAPI 未配置：请在 public/config.js 填入 Supabase 的 URL 和 anon key。');
   }
 
   // ---------- 实时事件 ----------
@@ -162,29 +158,22 @@
     A.on('clearHistory', () => { state.history = []; renderHistory(); saveCache(); });
     A.on('state', onState);
     A.on('requestState', onRequestState);
+    A.on('disconnected', () => { state.bootstrapped = false; });
   }
 
   // ---------- 状态自举（无服务器，靠房间内成员互相同步快照） ----------
   function bootstrap() {
     if (state.bootstrapped) return;
-    const cached = loadCache(state.roomId);
-    if (cached) {
-      applySnapshot(cached);
-      state.bootstrapped = true;
-      renderAll();
-    }
+    // 界面已在 init 时用缓存/默认值渲染过，这里只负责向房间索取权威快照
     window.SpinAPI.requestState();
-    // 若房间无人回应（自己是第一个），超时后用默认转盘
+    // 若房间无人回应（说明自己是房间里第一个），超时后以当前状态为准并广播出去
     setTimeout(() => {
-      if (!state.bootstrapped) {
-        const def = defaultRoomState();
-        applySnapshot(def);
-        state.bootstrapped = true;
-        window.SpinAPI.broadcastWheels(def.wheels, def.wheelOrder);
-        renderAll();
-        saveCache();
-      }
-    }, 1500);
+      if (state.bootstrapped) return;
+      state.bootstrapped = true;
+      window.SpinAPI.broadcastWheels(state.wheels, state.wheelOrder);
+      renderAll();
+      saveCache();
+    }, 2500);
   }
 
   function onState(snap) {

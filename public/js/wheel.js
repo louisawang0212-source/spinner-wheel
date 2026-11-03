@@ -77,7 +77,9 @@
     draw() {
       const ctx = this.ctx;
       const size = this.size;
-      const cx = size / 2, cy = size / 2, r = size / 2 - 8;
+      const cx = size / 2;
+      const cy = size / 2 + 4;      // 略微下移，给顶部指针留出空间
+      const r = size / 2 - 26;
       const N = this.options.length;
       ctx.clearRect(0, 0, size, size);
       if (N === 0) return;
@@ -112,55 +114,97 @@
           ctx.fill();
         }
 
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(a0 + sector / 2);
-        const tc = contrastColor(color);
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = tc;
-        ctx.font = '600 ' + Math.max(12, Math.min(17, size / 26)) + 'px ' +
-          '-apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
         const opt = this.options[i];
-        let tx = r - 14;
-        if (opt.icon && window.getIconImage) {
+        const tc = contrastColor(color);
+        const mid = a0 + sector / 2;
+        const fontSize = Math.max(12, Math.min(17, size / 26));
+        const iconSize = size / 16;
+
+        ctx.fillStyle = tc;
+        ctx.textBaseline = 'middle';
+        ctx.font = '600 ' + fontSize + 'px ' +
+          '-apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif';
+
+        const drawIcon = (x, y) => {
+          if (!opt.icon || !window.getIconImage) return false;
           const img = window.getIconImage(opt.icon, tc);
-          if (img && img.complete) {
-            const s = size / 16;
-            ctx.drawImage(img, r - 14 - s, -s / 2, s, s);
-            tx = r - 16 - s;
-          } else if (img) {
-            img.onload = () => this.draw();
+          if (!img) return false;
+          if (!img.complete) { img.onload = () => this.draw(); return false; }
+          ctx.drawImage(img, x, y - iconSize / 2, iconSize, iconSize);
+          return true;
+        };
+        const fitLabel = (maxW) => {
+          let label = String(opt.label || '');
+          if (ctx.measureText(label).width > maxW) {
+            while (label.length > 1 && ctx.measureText(label + '…').width > maxW) label = label.slice(0, -1);
+            label += '…';
           }
+          return label;
+        };
+
+        if (N >= 4) {
+          // 扇区较多：文字沿半径方向排列，并翻转朝下的扇区，避免出现倒立的字
+          let angle = mid;
+          const norm = ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+          const flip = norm >= Math.PI / 2 && norm < 3 * Math.PI / 2;
+          if (flip) angle += Math.PI;
+
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(angle);
+          ctx.textAlign = flip ? 'left' : 'right';
+          const dir = flip ? -1 : 1;          // 朝外方向
+          let textEdge = dir * (r - 14);
+          const hasIcon = opt.icon && window.getIconImage;
+          if (hasIcon) {
+            const iconX = flip ? -(r - 14) : (r - 14 - iconSize);
+            if (drawIcon(iconX, 0)) textEdge = dir * (r - 18 - iconSize);
+          }
+          const maxW = r - 34 - (hasIcon ? iconSize : 0);
+          ctx.fillText(fitLabel(maxW), textEdge, 0);
+          ctx.restore();
+        } else {
+          // 扇区很少（1~3 块）：文字水平排在扇区重心，最易读
+          const dist = r * 0.6;
+          const px = cx + Math.cos(mid) * dist;
+          const py = cy + Math.sin(mid) * dist;
+          ctx.textAlign = 'center';
+          const hasIcon = opt.icon && window.getIconImage;
+          const gap = 6;
+          const maxW = r * 0.72 - (hasIcon ? iconSize + gap : 0);
+          const label = fitLabel(maxW);
+          const textW = ctx.measureText(label).width;
+          const totalW = textW + (hasIcon ? iconSize + gap : 0);
+          const startX = px - totalW / 2;
+          if (hasIcon) drawIcon(startX, py);
+          ctx.textAlign = 'left';
+          ctx.fillText(label, startX + (hasIcon ? iconSize + gap : 0), py);
         }
-        ctx.fillText(opt.label, tx, 0);
-        ctx.restore();
       }
 
-      // 选中/中奖扇区金色描边高亮（静止时为极淡细线，落定中奖时为粗金线）
+      // 选中/中奖扇区：只描外弧（静止时为极淡细线，落定中奖时为粗金线），
+      // 不描两条半径，避免少扇区时中间出现一条多余的金线
       const ringIndex = (resultIndex != null) ? resultIndex : topIdx;
       if (ringIndex >= 0 && ringIndex < N) {
         const a0 = this.rotation + ringIndex * sector;
         const a1 = this.rotation + (ringIndex + 1) * sector;
         ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.arc(cx, cy, r, a0, a1);
-        ctx.closePath();
-        ctx.lineWidth = (resultIndex != null) ? 4 : 2;
-        ctx.strokeStyle = (resultIndex != null) ? '#C9A86A' : 'rgba(201,168,106,0.6)';
+        ctx.arc(cx, cy, r - 1, a0, a1);
+        ctx.lineWidth = (resultIndex != null) ? 5 : 2;
+        ctx.strokeStyle = (resultIndex != null) ? '#C9A86A' : 'rgba(201,168,106,0.65)';
         ctx.stroke();
       }
 
-      // 顶部指针（固定不旋转，放大+投影，醒目）
+      // 顶部指针（固定不旋转，尖端指向扇区内部，完整落在画布内）
       ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.25)';
+      ctx.shadowColor = 'rgba(0,0,0,0.22)';
       ctx.shadowBlur = 6;
       ctx.shadowOffsetY = 2;
       ctx.fillStyle = '#C9A86A';
       ctx.beginPath();
-      ctx.moveTo(cx, cy - r - 2);
-      ctx.lineTo(cx - 18, cy - r - 30);
-      ctx.lineTo(cx + 18, cy - r - 30);
+      ctx.moveTo(cx, cy - r + 16);
+      ctx.lineTo(cx - 14, cy - r - 12);
+      ctx.lineTo(cx + 14, cy - r - 12);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
