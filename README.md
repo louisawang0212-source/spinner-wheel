@@ -25,21 +25,22 @@ git push
 ```
 > 首次推送若提示要登录，用你的 GitHub 个人访问令牌（PAT）作密码；推完无需其他操作。
 
-### 2. 开启 GitHub Pages（只需点一下）
-1. 仓库页面 → **Settings → Pages**
-2. **Source** 选择 **GitHub Actions**
-3. 推送 `main` 分支会自动触发工作流 `.github/workflows/deploy.yml`，把 `public/` 部署上线
-4. 稍等一两分钟，得到站点地址，形如：
-   ```
-   https://<你的用户名>.github.io/spinner-wheel/
-   ```
+### 2. GitHub Pages 已开启
+仓库的 Pages 已启用（Source = **GitHub Actions**）。之后每次推送 `main` 都会自动重新部署 `public/`，站点地址：
+```
+https://louisawang0212-source.github.io/spinner-wheel/
+```
 
 ### 3. 和朋友一起玩
-把下面这样的链接发给他们（房间号随便取，大家用同一个即可实时同房间）：
+把下面这样的链接发给他们（`room=` 后面就是房间号，同一个号就是同一个房间）：
 ```
-https://<你的用户名>.github.io/spinner-wheel/?room=PARTY01
+https://louisawang0212-source.github.io/spinner-wheel/?room=PARTY01
 ```
 手机浏览器直接打开即可，无需安装。
+
+- **发链接**：页面右上角点「分享」自动复制带房间号的完整链接，微信里直接粘贴。
+- **报房间号也行**：点右上角的房间号（手机上显示为「加入 XXXXXX」），输入朋友的 6 位房间号即可跳进同一个房间。
+- **换昵称**：顶栏「昵称」框改一下，其他人马上能看到。
 
 > 小提示：同一房间里，**第一个打开链接的人**会临时充当"主机"来维持房间（他的浏览器保持房间状态）；他关掉页面房间就解散（本来就是临时房间）。想长时间挂着，让一个人一直开着那个标签页即可。
 

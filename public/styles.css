@@ -62,9 +62,25 @@ html, body {
 }
 .btn-ghost:active { background: var(--bg); }
 .room-code {
+  font-family: inherit;
   font-size: 13px; color: var(--text-2);
   background: var(--bg); padding: 6px 10px; border-radius: var(--radius-sm);
+  border: 1px solid transparent; cursor: pointer;
   letter-spacing: 1px; font-variant-numeric: tabular-nums;
+  white-space: nowrap; flex: 0 0 auto;
+  transition: border-color .18s ease, color .18s ease;
+}
+.room-code:hover { border-color: var(--border); color: var(--text); }
+
+/* 手机端：房间号兼作"加入"入口 */
+@media (max-width: 860px) {
+  .room-code {
+    display: inline-flex; align-items: baseline;
+    font-size: 12px; padding: 6px 8px; letter-spacing: 0;
+  }
+  .room-code::before {
+    content: '加入'; margin-right: 5px; color: var(--gold); font-weight: 600;
+  }
 }
 
 /* ---------- 布局 ---------- */
@@ -298,13 +314,14 @@ html, body {
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 860px) {
-  .topbar { padding: 10px 14px; gap: 8px; }
-  .brand-name { font-size: 15px; }
-  .top-actions { gap: 8px; }
+  .topbar { padding: 10px 12px; gap: 8px; }
+  .brand-name { display: none; }
+  .brand { flex: 0 0 auto; }
+  .top-actions { flex: 1 1 auto; min-width: 0; gap: 6px; justify-content: flex-end; }
+  .name-field { flex: 1 1 auto; min-width: 0; }
   .name-label { display: none; }
-  .name-input { width: 104px; padding: 6px 10px; }
-  .btn-ghost { padding: 6px 12px; }
-  .room-code { display: none; }
+  .name-input { width: 100%; min-width: 0; padding: 6px 10px; }
+  .btn-ghost { flex: 0 0 auto; padding: 6px 12px; }
 
   .layout {
     grid-template-columns: 1fr;

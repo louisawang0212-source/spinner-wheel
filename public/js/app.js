@@ -81,7 +81,7 @@
     state.name = sessionStorage.getItem('sw_name') || ('访客' + Math.floor(1000 + Math.random() * 9000));
     sessionStorage.setItem('sw_name', state.name);
 
-    $('#roomCode').textContent = room;
+    $('#roomCodeText').textContent = room;
     $('#nameInput').value = state.name;
 
     mainWheel = new window.Wheel($('#wheelCanvas'));
@@ -90,6 +90,7 @@
     $('#spinBtn').addEventListener('click', onSpin);
     $('#nameInput').addEventListener('change', onNameChange);
     $('#copyBtn').addEventListener('click', copyShare);
+    $('#roomCode').addEventListener('click', onJoinByCode);
     $('#addWheelBtn').addEventListener('click', onAddWheel);
     $('#addOptionBtn').addEventListener('click', onAddOption);
     $('#deleteWheelBtn').addEventListener('click', onDeleteWheel);
@@ -537,6 +538,20 @@
     navigator.clipboard.writeText(location.href)
       .then(() => toast('分享链接已复制'))
       .catch(() => toast('复制失败，请手动复制地址栏链接'));
+  }
+
+  // 手动输入房间号加入朋友的转盘（手机端从顶部"加入"入口点开）
+  function onJoinByCode() {
+    const input = window.prompt('输入朋友的 6 位房间号：', state.roomId);
+    if (input === null) return;
+    const code = String(input).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!code) return;
+    if (code.length !== 6) { toast('房间号是 6 位字符'); return; }
+    if (code === state.roomId) { toast('你已经在房间里了'); return; }
+    saveCache();
+    const url = new URL(location.href);
+    url.searchParams.set('room', code);
+    location.href = url.toString();
   }
 
   // ---------- 实时转动浮层 ----------
