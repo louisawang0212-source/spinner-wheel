@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#F5F5F7" />
+  <title>共享转盘</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-dot"></span>
+      <span class="brand-name">共享转盘</span>
+    </div>
+    <div class="top-actions">
+      <div class="name-field">
+        <span class="name-label">昵称</span>
+        <input id="nameInput" class="name-input" maxlength="24" placeholder="你的昵称" />
+      </div>
+      <button id="copyBtn" class="btn-ghost" title="复制分享链接">分享</button>
+      <span id="roomCode" class="room-code"></span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 左：转盘 -->
+    <section class="stage">
+      <div class="wheel-wrap">
+        <canvas id="wheelCanvas"></canvas>
+      </div>
+      <div id="activeWheelName" class="active-wheel-name"></div>
+      <button id="spinBtn" class="spin-btn">转动</button>
+      <p class="hint">把链接发给朋友，进同一个房间即可一起玩。谁转动，所有人都能实时看到结果。</p>
+    </section>
+
+    <!-- 右：面板 -->
+    <aside class="panel">
+      <div class="card">
+        <div class="card-head">
+          <h2>我的转盘</h2>
+          <button id="addWheelBtn" class="btn-mini">+ 新建</button>
+        </div>
+        <div id="wheelList" class="wheel-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <input id="wheelNameInput" class="wheel-name-input" maxlength="24" placeholder="转盘名称" />
+          <button id="deleteWheelBtn" class="btn-mini danger">删除</button>
+        </div>
+        <div id="optionsList" class="options-list"></div>
+        <button id="addOptionBtn" class="btn-add">+ 添加选项</button>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>在线好友</h2></div>
+        <div id="participantsList" class="participants-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>转动记录</h2>
+          <button id="clearHistoryBtn" class="btn-mini">清空</button>
+        </div>
+        <div id="historyList" class="history-list"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- 实时转动浮层 -->
+  <div id="overlay" class="overlay">
+    <div class="overlay-card">
+      <div class="overlay-wheel-wrap">
+        <canvas id="overlayCanvas"></canvas>
+      </div>
+      <div id="overlayText" class="overlay-text"></div>
+      <div id="overlayResult" class="overlay-result"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <!-- 移动端：编辑面板抽屉遮罩 + 触发按钮 -->
+  <div id="drawerBackdrop" class="drawer-backdrop"></div>
+  <button id="mobileEditBtn" class="mobile-edit-btn" aria-label="编辑转盘">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+    编辑
+  </button>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/wheel.js"></script>
+  <script src="js/socket-client.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
